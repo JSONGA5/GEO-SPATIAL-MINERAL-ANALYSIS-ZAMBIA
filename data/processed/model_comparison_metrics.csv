@@ -1,0 +1,4 @@
+model,spatial_roc_auc,random_roc_auc,leakage_roc_inflation,spatial_pr_auc,random_pr_auc,precision,recall,f1_score,brier_score,TP,FP,FN,TN
+Logistic_Regression,0.7939,0.7996,0.0057,0.3788,0.4015,0.1909,0.6748,0.2976,0.1711,139,589,67,1705
+Random_Forest,0.7644,0.7783,0.0139,0.3459,0.3897,0.346,0.3981,0.3702,0.1014,82,155,124,2139
+XGBoost,0.7543,0.7665,0.0122,0.3352,0.3734,0.4041,0.2864,0.3352,0.0797,59,87,147,2207

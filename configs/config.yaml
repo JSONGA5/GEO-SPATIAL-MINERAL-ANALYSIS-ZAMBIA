@@ -1,0 +1,34 @@
+project:
+  name: "mineral-prospects"
+  title: "Mineral Prospects: Geospatial Machine Learning for Mineral Prospectivity Mapping in Zambia"
+  region: "Zambian Copperbelt & Domes Region (North-Western & Copperbelt Provinces)"
+  mineral_system: "Sediment-Hosted Stratiform Copper-Cobalt (SSC)"
+  random_seed: 42
+
+crs:
+  geographic_crs: "EPSG:4326"   # WGS 84 for raw ingestion & web maps (Folium)
+  projected_crs: "EPSG:32735"   # WGS 84 / UTM Zone 35S (metric distances & grid alignment)
+
+study_area:
+  # Bounding box covering the Zambian Copperbelt to Solwezi/Kabompo Domes (decimal degrees)
+  min_lon: 25.0
+  max_lon: 29.0
+  min_lat: -13.5
+  max_lat: -11.5
+  grid_resolution_m: 2000       # 2 km x 2 km analysis grid cells
+
+data_paths:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  external_dir: "data/external"
+
+synthetic_simulation:
+  enabled_as_fallback: true
+  n_grid_points: 2500
+  n_fault_segments: 18
+  positive_occurrence_rate: 0.08  # Realistic rare-event prior (~8% of sampled cells)
+
+validation:
+  spatial_block_size_m: 25000     # 25 km spatial blocks to prevent spatial autocorrelation leakage
+  n_splits: 5
+  bootstrap_iterations: 100

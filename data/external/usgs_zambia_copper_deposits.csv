@@ -1,0 +1,13 @@
+deposit_name,longitude,latitude,structural_domain,host_unit,ore_mt,cu_grade_pct,co_grade_pct,usgs_source
+Konkola-Mingomba,27.790,-12.350,Kafue Anticline (NW Flank),Lower Roan Ore Shale,450.0,3.80,0.08,USGS SIR 2010-5090-J
+Nchanga (Chingola),27.860,-12.520,Kafue Anticline (Nchanga Syncline),Lower Roan Ore Shale & Arkose,520.0,2.75,0.12,USGS SIR 2010-5090-J
+Mufulira,28.240,-12.540,Mufulira Syncline (NE Margin),Lower Roan Interbedded Quartzite,295.0,3.10,0.04,USGS SIR 2010-5090-J
+Chambishi,28.050,-12.650,Chambishi-Nkana Basin,Lower Roan Ore Shale,135.0,2.50,0.11,USGS SIR 2010-5090-J
+Nkana (Kitwe),28.210,-12.830,Kafue Anticline (SW Flank),Lower Roan Ore Shale,380.0,2.30,0.14,USGS SIR 2010-5090-J
+Baluba-Luanshya,28.380,-13.110,Roan-Muliashi Basin,Lower Roan Dolomitic Schist,190.0,2.40,0.15,USGS SIR 2010-5090-J
+Bwana Mkubwa (Ndola),28.650,-13.000,Kafue Anticline (SE Termination),Lower Roan Footwall Quartzite,65.0,2.10,0.03,USGS SIR 2010-5090-J
+Kansanshi (Solwezi),26.430,-12.100,Solwezi Dome Flank,Mwashia & Upper Roan Vein/Stratabound,720.0,0.86,0.02,USGS SIR 2010-5090-J
+Lumwana (Malundwe-Chimiwungo),25.860,-12.230,Mwombezhi Dome Shear Zone,Lower Roan Kyanite-Biotite Schist,650.0,0.68,0.05,USGS SIR 2010-5090-J
+Sentinel (Kalumbila),25.250,-12.250,Kabompo Dome Eastern Margin,Mwashia Carbonaceous Phyllite,940.0,0.51,0.03,USGS SIR 2010-5090-J
+Fishtie (Kashime),28.480,-13.380,Mkushi-Serenje Extension,Lower Roan Silty Dolomite,55.0,1.90,0.04,USGS MRDS
+Ntambu-Kamoa Foreland Trend,25.080,-12.080,Western Foreland Margin,Mwashia Diamictite Contact,110.0,1.45,0.06,USGS SIR 2010-5090-J
