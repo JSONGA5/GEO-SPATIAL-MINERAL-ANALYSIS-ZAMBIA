@@ -10,6 +10,7 @@ from src.models.uncertainty import (
     run_spatial_bootstrap_uncertainty,
 )
 
+#this could be improved to avoid using the same function 
 
 def test_bootstrap_uncertainty_bounds_and_prioritization():
     rng = np.random.default_rng(7)
