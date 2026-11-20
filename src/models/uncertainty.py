@@ -25,6 +25,7 @@ def run_spatial_bootstrap_uncertainty(
     block_col: str = "spatial_block_id",
     n_bootstraps: int = 50,
     mc_noise_std: float = 0.05,
+    n_mc_samples: int = 3,
     seed: int = 42,
 ) -> gpd.GeoDataFrame:
     """
@@ -46,48 +47,94 @@ def run_spatial_bootstrap_uncertainty(
     Outputs Added to GeoDataFrame
     -----------------------------
     - `prob_mean`: Posterior/ensemble mean prospectivity probability E[p(s)].
-    - `prob_std`: Ensemble standard deviation SD[p(s)] (epistemic uncertainty).
+    - `prob_std`: Combined epistemic + measurement uncertainty SD[p(s)].
+    - `epistemic_std`: Spatial bootstrap standard deviation.
+    - `aleatoric_std`: Mean within-model Monte Carlo perturbation standard deviation.
     - `prob_ci_lower`: 5th percentile prediction interval bound.
     - `prob_ci_upper`: 95th percentile prediction interval bound.
-    - `prob_ci_width`: 90% confidence interval width (p95 - p05).
+    - `prob_ci_width`: 90% prediction interval width (p95 - p05).
     - `shannon_entropy`: Predictive entropy H(p) measuring total classification ambiguity.
-    - `coef_of_variation`: Relative uncertainty SD[p(s)] / (E[p(s)] + 1e-4).
+    - `coef_of_variation`: Relative uncertainty SD[p(s)] / max(E[p(s)], epsilon).
     """
+    if gdf.empty:
+        raise ValueError("Cannot quantify uncertainty for an empty GeoDataFrame.")
+
+    required_cols = set(feature_cols) | {target_col, block_col}
+    missing_cols = sorted(required_cols.difference(gdf.columns))
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+    if n_bootstraps < 1:
+        raise ValueError("n_bootstraps must be at least 1.")
+    if n_mc_samples < 1:
+        raise ValueError("n_mc_samples must be at least 1.")
+    if mc_noise_std < 0:
+        raise ValueError("mc_noise_std must be non-negative.")
+
     rng = np.random.default_rng(seed)
     X_full = gdf[feature_cols].to_numpy(dtype=float)
     y_full = gdf[target_col].to_numpy(dtype=int)
     blocks = gdf[block_col].to_numpy()
+
+    if set(np.unique(y_full)) != {0, 1}:
+        raise ValueError("target_col must contain binary 0/1 values.")
+    if pd.isna(blocks).any():
+        raise ValueError("block_col cannot contain missing spatial block IDs.")
+    if np.isinf(X_full).any():
+        raise ValueError("Feature matrix contains infinite values.")
+
     unique_blocks = np.unique(blocks)
+    if len(unique_blocks) < 2:
+        raise ValueError("At least two spatial blocks are required for bootstrap uncertainty.")
 
     feature_stds = np.nanstd(X_full, axis=0)
-    # Do not add continuous Gaussian noise to binary one-hot lithology columns
-    is_binary = np.array([col.startswith("lith_") for col in feature_cols])
+    is_binary = np.array([
+        np.all(np.isin(np.unique(X_full[:, i][~np.isnan(X_full[:, i])]), [0.0, 1.0]))
+        for i in range(X_full.shape[1])
+    ])
     noise_scale = np.where(is_binary, 0.0, feature_stds * mc_noise_std)
 
     n_samples = len(gdf)
-    boot_preds = np.zeros((n_bootstraps, n_samples), dtype=float)
+    epistemic_preds = np.zeros((n_bootstraps, n_samples), dtype=float)
+    mc_preds = np.zeros((n_bootstraps, n_mc_samples, n_samples), dtype=float)
 
     for b in range(n_bootstraps):
-        sampled_blocks = rng.choice(unique_blocks, size=len(unique_blocks), replace=True)
-        train_idx_list = [np.where(blocks == blk)[0] for blk in sampled_blocks]
-        train_idx = np.concatenate(train_idx_list)
-
-        # Ensure both classes are present in bootstrap sample
-        if len(np.unique(y_full[train_idx])) < 2:
-            train_idx = np.arange(n_samples)
+        train_idx = np.array([], dtype=int)
+        for _ in range(100):
+            sampled_blocks = rng.choice(unique_blocks, size=len(unique_blocks), replace=True)
+            train_idx = np.concatenate([
+                np.where(blocks == block_id)[0] for block_id in sampled_blocks
+            ])
+            if len(np.unique(y_full[train_idx])) == 2:
+                break
+        else:
+            raise ValueError(
+                "Spatial block bootstrap could not create a training sample containing both classes."
+            )
 
         model_b = clone(base_pipeline)
         model_b.fit(X_full[train_idx], y_full[train_idx])
 
-        # Monte Carlo perturbation on evaluation features
-        X_perturbed = X_full + rng.normal(0.0, noise_scale, size=X_full.shape)
-        boot_preds[b, :] = model_b.predict_proba(X_perturbed)[:, 1]
+        epistemic_preds[b, :] = model_b.predict_proba(X_full)[:, 1]
+        for m in range(n_mc_samples):
+            X_perturbed = X_full + rng.normal(0.0, noise_scale, size=X_full.shape)
+            mc_preds[b, m, :] = model_b.predict_proba(X_perturbed)[:, 1]
 
     out_gdf = gdf.copy()
-    prob_mean = np.mean(boot_preds, axis=0)
-    prob_std = np.std(boot_preds, axis=0)
-    ci_lower = np.percentile(boot_preds, 5, axis=0)
-    ci_upper = np.percentile(boot_preds, 95, axis=0)
+    epistemic_std = np.std(
+        epistemic_preds,
+        axis=0,
+        ddof=1 if n_bootstraps > 1 else 0,
+    )
+    aleatoric_std = np.mean(
+        np.std(mc_preds, axis=1, ddof=1 if n_mc_samples > 1 else 0),
+        axis=0,
+    )
+    prob_std = np.sqrt(epistemic_std ** 2 + aleatoric_std ** 2)
+
+    total_preds = mc_preds.reshape(n_bootstraps * n_mc_samples, n_samples)
+    prob_mean = np.mean(total_preds, axis=0)
+    ci_lower = np.percentile(total_preds, 5, axis=0)
+    ci_upper = np.percentile(total_preds, 95, axis=0)
 
     # Clip to avoid log(0) in Shannon entropy calculation
     p_clip = np.clip(prob_mean, 1e-6, 1.0 - 1e-6)
@@ -95,11 +142,16 @@ def run_spatial_bootstrap_uncertainty(
 
     out_gdf["prob_mean"] = np.round(prob_mean, 4)
     out_gdf["prob_std"] = np.round(prob_std, 4)
+    out_gdf["epistemic_std"] = np.round(epistemic_std, 4)
+    out_gdf["aleatoric_std"] = np.round(aleatoric_std, 4)
     out_gdf["prob_ci_lower"] = np.round(ci_lower, 4)
     out_gdf["prob_ci_upper"] = np.round(ci_upper, 4)
     out_gdf["prob_ci_width"] = np.round(ci_upper - ci_lower, 4)
     out_gdf["shannon_entropy"] = np.round(entropy, 4)
-    out_gdf["coef_of_variation"] = np.round(prob_std / (prob_mean + 0.01), 4)
+    out_gdf["coef_of_variation"] = np.round(
+        prob_std / np.maximum(prob_mean, np.finfo(float).eps),
+        4,
+    )
 
     return out_gdf
 
@@ -131,6 +183,24 @@ def classify_uncertainty_quadrants_and_targets(
     high-confidence vs. low-confidence conditioning on each regime (using the
     within-regime SD quantile and Coefficient of Variation CV = SD / Mean).
     """
+    required_cols = {
+        "prob_mean",
+        "prob_std",
+        "prob_ci_upper",
+        "structural_redox_interaction",
+    }
+    missing_cols = sorted(required_cols.difference(gdf.columns))
+    if missing_cols:
+        raise ValueError(f"Missing required uncertainty columns: {missing_cols}")
+    if not 0.0 < prob_threshold < 1.0:
+        raise ValueError("prob_threshold must be between 0 and 1.")
+    if not prob_threshold < high_prob_threshold < 1.0:
+        raise ValueError(
+            "high_prob_threshold must be greater than prob_threshold and less than 1."
+        )
+    if not 0.0 < std_median_quantile < 1.0:
+        raise ValueError("std_median_quantile must be between 0 and 1.")
+
     out_gdf = gdf.copy()
     high_prob = out_gdf["prob_mean"] >= prob_threshold
 
@@ -166,7 +236,19 @@ def classify_uncertainty_quadrants_and_targets(
 
     # Exploration Target Prioritization Rules
     p1_mask = (out_gdf["prob_mean"] >= high_prob_threshold) & high_conf
-    p2_mask = high_prob & (~p1_mask)
+    p2_mask = (
+        (~p1_mask)
+        & (
+            (
+                (out_gdf["prob_mean"] >= prob_threshold)
+                & (out_gdf["prob_mean"] < high_prob_threshold)
+            )
+            | (
+                (out_gdf["prob_mean"] >= high_prob_threshold)
+                & (~high_conf)
+            )
+        )
+    )
     p3_mask = (
         (~p1_mask)
         & (~p2_mask)
